@@ -446,6 +446,11 @@ pub fn optimize_from_memory(data: &[u8], opts: &Options) -> PngResult<Vec<u8>> {
     }
 }
 
+/// Decode a PNG file from memory
+pub fn open_from_memory(data: &[u8]) -> PngData {
+    PngData::from_slice(data, true).unwrap()
+}
+
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 /// Defines options to be used for a single compression trial
 struct TrialOptions {
