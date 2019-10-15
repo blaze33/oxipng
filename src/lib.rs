@@ -249,12 +249,7 @@ impl Options {
         self
     }
 
-    fn apply_preset_4(mut self) -> Self {
-        self.alphas.insert(AlphaOptim::White);
-        self.alphas.insert(AlphaOptim::Up);
-        self.alphas.insert(AlphaOptim::Down);
-        self.alphas.insert(AlphaOptim::Left);
-        self.alphas.insert(AlphaOptim::Right);
+    fn apply_preset_4(self) -> Self {
         self.apply_preset_3()
     }
 
@@ -285,9 +280,9 @@ impl Default for Options {
         for i in 0..4 {
             strategies.insert(i);
         }
+        // We always need NoOp to be present
         let mut alphas = HashSet::new();
-        alphas.insert(colors::AlphaOptim::NoOp);
-        alphas.insert(colors::AlphaOptim::Black);
+        alphas.insert(AlphaOptim::NoOp);
 
         Options {
             backup: false,
@@ -640,8 +635,13 @@ fn optimize_png(
                 None
             }
         });
-        let best: Option<TrialWithData> =
-            best.reduce_with(|i, j| if i.1.len() < j.1.len() || (i.1.len() == j.1.len() && i.0 < j.0) { i } else { j });
+        let best: Option<TrialWithData> = best.reduce_with(|i, j| {
+            if i.1.len() < j.1.len() || (i.1.len() == j.1.len() && i.0 < j.0) {
+                i
+            } else {
+                j
+            }
+        });
 
         if let Some(better) = best {
             png.idat_data = better.1;
@@ -789,19 +789,25 @@ fn perform_reductions(
     try_alpha_reductions(png, &opts.alphas, eval);
 }
 
+struct DeadlineImp {
+    start: Instant,
+    timeout: Duration,
+    print_message: AtomicBool,
+}
+
 /// Keep track of processing timeout
 pub(crate) struct Deadline {
-    start: Instant,
-    timeout: Option<Duration>,
-    print_message: AtomicBool,
+    imp: Option<DeadlineImp>,
 }
 
 impl Deadline {
     pub fn new(timeout: Option<Duration>, verbose: bool) -> Self {
         Self {
-            start: Instant::now(),
-            timeout,
-            print_message: AtomicBool::new(verbose),
+            imp: timeout.map(|timeout| DeadlineImp {
+                start: Instant::now(),
+                timeout,
+                print_message: AtomicBool::new(verbose),
+            }),
         }
     }
 
@@ -809,11 +815,11 @@ impl Deadline {
     ///
     /// If the verbose option is on, it also prints a timeout message once.
     pub fn passed(&self) -> bool {
-        if let Some(timeout) = self.timeout {
-            let elapsed = self.start.elapsed();
-            if elapsed > timeout {
-                if self.print_message.load(Ordering::Relaxed) {
-                    self.print_message.store(false, Ordering::Relaxed);
+        if let Some(imp) = &self.imp {
+            let elapsed = imp.start.elapsed();
+            if elapsed > imp.timeout {
+                if imp.print_message.load(Ordering::Relaxed) {
+                    imp.print_message.store(false, Ordering::Relaxed);
                     eprintln!("Timed out after {} second(s)", elapsed.as_secs());
                 }
                 return true;
